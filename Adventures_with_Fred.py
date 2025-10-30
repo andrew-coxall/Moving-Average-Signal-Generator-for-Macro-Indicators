@@ -3,7 +3,11 @@ from fredapi import Fred
 
 FRED_API_KEY = '559636d8c83399a1c2dbffce0bb2c897'
 
-SP500_TICKER = 'SP500'
+# Define the indicators and their FRED tickers
+INDICATORS = {
+    'SP500': 'SP500',           # S&P 500 Index (Daily)
+    '10Y_Treasury': 'DGS10'     # 10-Year Treasury Yield (Daily)
+}
 
 # Data Fetching Function
 def fetch_fred_data(ticker):
@@ -12,6 +16,7 @@ def fetch_fred_data(ticker):
         fred = Fred(api_key=FRED_API_KEY)
 
         data = fred.get_series(ticker).to_frame(name='Close')
+        data['Close'] = pd.to_numeric(data['Close'], errors='coerce')
         # Remove rows with missing values
         data.dropna(inplace=True)
         return data
@@ -32,7 +37,7 @@ def generate_ma_signals(df, short_window=50, long_window=200):
     df['Signal'] = 0.0
 
     # Buy/Risk-On Signal: Short MA crosses above Long MA
-    df.loc[df.index[short_window:], 'Signal'] = (df['SMA'][short_window:] > df['LMA'][short_window:]).astype(float)
+    df.loc[df.index[long_window - 1:], 'Signal'] = (df['SMA'] > df['LMA']).astype(float)
 
     df['Position'] = df['Signal'].diff()
 
@@ -42,14 +47,26 @@ def generate_ma_signals(df, short_window=50, long_window=200):
     return df
 
 if __name__ == "__main__":
-    # 1. Fetch the data
-    sp500_data = fetch_fred_data(SP500_TICKER)
+    merged_data = None
+    for name, ticker in INDICATORS.items():
+        data = fetch_fred_data(ticker)
+        if data.empty: continue
 
-    if not sp500_data.empty:
-        print("✅ Data successfully fetched for S&P 500:")
-        print(sp500_data.tail())
+        data.rename(columns={'Close': f'{name}_Close'}, inplace=True)
+        if merged_data is None:
+            merged_data = data
+        else:
+            merged_data = merged_data.merge(data, how='outer', left_index=True, right_index=True)
 
-# 2. Generate MA signals and show result
-sp500_signals = generate_ma_signals(sp500_data)
-print("✅ Signals generated:")
-print(sp500_signals.tail())
+    if merged_data is not None:
+        merged_data.dropna(inplace=True)
+        print(f"✅ Data merged. Total points: {len(merged_data):,}")
+
+        # Extract S&P 500 data for signal generation
+        sp500_data = merged_data[['SP500_Close']].copy()
+        sp500_data.rename(columns={'SP500_Close': 'Close'}, inplace=True)
+
+        # 2. Generate MA signals and show result
+        sp500_signals = generate_ma_signals(sp500_data)
+        print("✅ Signals generated:")
+        print(sp500_signals.tail())
