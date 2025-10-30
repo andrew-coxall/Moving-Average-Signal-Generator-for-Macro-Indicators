@@ -1,0 +1,1 @@
+# Moving-Average-Signal-Generator-for-Macro-Indicators
