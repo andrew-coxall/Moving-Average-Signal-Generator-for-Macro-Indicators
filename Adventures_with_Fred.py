@@ -49,11 +49,7 @@ if __name__ == "__main__":
         print("✅ Data successfully fetched for S&P 500:")
         print(sp500_data.tail())
 
-        # 2. Generate the signals
-        strategy_df = generate_ma_signals(sp500_data.copy()) 
-
-        print("\n📊 Strategy Signals Generated:")
-        # Show key columns where a crossover (1.0 or -1.0) occurred
-        # 1.0 means Short MA crossed ABOVE Long MA (Buy signal)
-        # -1.0 means Short MA crossed BELOW Long MA (Sell signal)
-        print(strategy_df[strategy_df['Position'].isin([1.0, -1.0])].tail())
+# 2. Generate MA signals and show result
+sp500_signals = generate_ma_signals(sp500_data)
+print("✅ Signals generated:")
+print(sp500_signals.tail())
