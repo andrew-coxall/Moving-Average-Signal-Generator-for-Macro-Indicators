@@ -24,27 +24,32 @@ def fetch_fred_data(ticker):
         print(f"Error fetching data for {ticker}: {e}")
         return pd.DataFrame()
 
-# Strategy Function
-def generate_ma_signals(df, short_window=50, long_window=200):
-    """Calculates MAs and generates buy/sell signals."""
-
-    # 1. Calculate Moving Averages (using 'Close' column)
+# Strategy Function (Refactored to be reusable for all indicators)
+def calculate_ma_crossover_signal(series, asset_name, short_window=50, long_window=200):
+    """Calculates MAs and returns a DataFrame with the Signal column."""
+    
+    df = series.to_frame(name='Close').copy()
     df['SMA'] = df['Close'].rolling(window=short_window).mean()
     df['LMA'] = df['Close'].rolling(window=long_window).mean()
 
     # 2. Generate Signal
-    # Initialize the signal column to 0 (No position/Hold)
-    df['Signal'] = 0.0
+    signal_col = f'{asset_name}_Signal'
+    df[signal_col] = 0.0
+    
+    # Default Risk-On: Short MA > Long MA (e.g., for SP500)
+    ma_crossover = (df['SMA'] > df['LMA'])
 
-    # Buy/Risk-On Signal: Short MA crosses above Long MA
-    df.loc[df.index[long_window - 1:], 'Signal'] = (df['SMA'] > df['LMA']).astype(float)
+    # Inverse Risk-On logic for 10Y_Treasury (falling rates is risk-on)
+    if asset_name == '10Y_Treasury':
+        ma_crossover = (df['SMA'] < df['LMA'])
+        
+    start_index = long_window - 1 
+    df.loc[df.index[start_index:], signal_col] = ma_crossover.iloc[start_index:].astype(float)
 
-    df['Position'] = df['Signal'].diff()
+    # Drop NaNs from rolling calculation
+    df.dropna(subset=[signal_col], inplace=True)
 
-    # Fill NaN values from rolling calculation (first 'long_window' rows)
-    df.dropna(inplace=True)
-
-    return df
+    return df[[signal_col]]
 
 if __name__ == "__main__":
     merged_data = None
@@ -62,11 +67,18 @@ if __name__ == "__main__":
         merged_data.dropna(inplace=True)
         print(f"✅ Data merged. Total points: {len(merged_data):,}")
 
-        # Extract S&P 500 data for signal generation
-        sp500_data = merged_data[['SP500_Close']].copy()
-        sp500_data.rename(columns={'SP500_Close': 'Close'}, inplace=True)
+        # 2. Generate Signals for ALL Indicators and merge them back
+        for name in INDICATORS.keys():
+            close_col = f'{name}_Close'
+            signal_df = calculate_ma_crossover_signal(merged_data[close_col], name)
+            merged_data = merged_data.merge(signal_df, how='inner', left_index=True, right_index=True)
 
-        # 2. Generate MA signals and show result
-        sp500_signals = generate_ma_signals(sp500_data)
-        print("✅ Signals generated:")
-        print(sp500_signals.tail())
+        # 3. Define the Trading Signal (Still using baseline SP500 for now)
+        merged_data['Trading_Signal'] = merged_data['SP500_Signal']
+        merged_data['Position'] = merged_data['Trading_Signal'].diff()
+
+        # Final cleanup after MA calculation and diff
+        merged_data.dropna(inplace=True)
+        
+        print("✅ Signals generated and merged (showing final 5 rows):")
+        print(merged_data[['SP500_Signal', '10Y_Treasury_Signal', 'Position']].tail())
