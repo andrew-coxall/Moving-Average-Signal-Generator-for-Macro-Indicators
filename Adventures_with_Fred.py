@@ -51,6 +51,21 @@ def calculate_ma_crossover_signal(series, asset_name, short_window=50, long_wind
 
     return df[[signal_col]]
 
+# --- Backtesting and PnL Simulation ---
+def backtest_strategy(df, close_col, signal_col, capital=100000):
+    """
+    Simulates trades based on a specified 'Signal' column and calculates PnL.
+    """
+    df['Daily_Return'] = df[close_col].pct_change()
+    # Strategy Return = Daily Return * Position (lagged by 1 day)
+    df['Strategy_Return'] = df['Daily_Return'] * df[signal_col].shift(1)
+
+    # Calculate cumulative strategy returns (PnL)
+    df['Cumulative_Return'] = (1 + df['Strategy_Return']).cumprod()
+    df['Cumulative_PnL'] = df['Cumulative_Return'] * capital
+
+    return df
+
 if __name__ == "__main__":
     merged_data = None
     for name, ticker in INDICATORS.items():
@@ -73,12 +88,25 @@ if __name__ == "__main__":
             signal_df = calculate_ma_crossover_signal(merged_data[close_col], name)
             merged_data = merged_data.merge(signal_df, how='inner', left_index=True, right_index=True)
 
-        # 3. Define the Trading Signal (Still using baseline SP500 for now)
-        merged_data['Trading_Signal'] = merged_data['SP500_Signal']
+        # 3. Define the Trading Signal (Meta-Signal: Both signals must be 'Risk-On')
+        merged_data['Trading_Signal'] = merged_data['SP500_Signal'] * merged_data['10Y_Treasury_Signal']
         merged_data['Position'] = merged_data['Trading_Signal'].diff()
 
         # Final cleanup after MA calculation and diff
         merged_data.dropna(inplace=True)
         
         print("✅ Signals generated and merged (showing final 5 rows):")
-        print(merged_data[['SP500_Signal', '10Y_Treasury_Signal', 'Position']].tail())
+        print(merged_data[['SP500_Signal', '10Y_Treasury_Signal', 'Trading_Signal', 'Position']].tail())
+        
+        ASSET_NAME = 'SP500'
+        CLOSE_COLUMN = f'{ASSET_NAME}_Close'
+        
+        print("\n--- 4. Backtesting and PnL Simulation (Meta-Signal) ---")
+        backtested_data = backtest_strategy(merged_data.copy(), 
+                                            close_col=CLOSE_COLUMN, 
+                                            signal_col='Trading_Signal')
+        if backtested_data is not None:
+            final_pnl = backtested_data['Cumulative_PnL'].iloc[-1]
+            initial_capital = backtested_data['Cumulative_PnL'].iloc[0]
+            total_return = (final_pnl / initial_capital - 1) * 100
+            print(f"💰 Final PnL: ${final_pnl:,.2f} | Total Return: {total_return:,.2f}%")
