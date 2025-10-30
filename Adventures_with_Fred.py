@@ -27,5 +27,28 @@ def generate_ma_signals(df, short_window=50, long_window=200):
     df['SMA'] = df['Close'].rolling(window=short_window).mean()
     df['LMA'] = df['Close'].rolling(window=long_window).mean()
 
-    
+    #2. Generate Signals 
+    df['Signal'] = 0
 
+    #Buy/Rish-on Signal: Short MA crosses above Long MA
+    df.loc[df.index[short_window:], 'Signal'] = (df['SMA'][short_window:] > df['LMA'][short_window:]).astype(float)
+
+    return df
+
+# Main Execution
+if __name__ == "__main__":
+    #Fetch Data
+    sp500_data = fetch_fred_data(SP500_TICKER)
+
+  if not sp500_data.empty:
+        print("✅ Data successfully fetched for S&P 500:")
+        print(sp500_data.tail())
+
+        # 2. Generate the signals
+        strategy_df = generate_ma_signals(sp500_data.copy()) # Use a copy to avoid SettingWithCopyWarning if not needed
+
+        print("\n Strategy Signals Generated:")
+        # Show key columns where a crossover (1.0 or -1.0) occurred
+        # 1.0 means Short MA crossed ABOVE Long MA (Buy signal)
+        # -1.0 means Short MA crossed BELOW Long MA (Sell signal)
+        print(strategy_df[strategy_df['Position'].isin([1.0, -1.0])].tail())
