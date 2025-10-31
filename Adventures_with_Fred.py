@@ -67,6 +67,31 @@ def backtest_strategy(df, close_col, signal_col, capital=100000):
 
     return df
 
+# --- Performance Metrics Calculation ---
+def calculate_performance_metrics(df, risk_free_rate=0.0):
+    """Calculates key performance metrics like CAGR, Max Drawdown, and Sharpe Ratio."""
+    
+    # 1. Annualized Return (CAGR)
+    days = (df.index[-1] - df.index[0]).days
+    cagr = (df['Cumulative_Return'].iloc[-1] ** (365.25 / days)) - 1
+    
+    # 2. Maximum Drawdown (MDD)
+    # Calculate the running maximum (peak)
+    peak = df['Cumulative_Return'].cummax()
+    # Calculate the Drawdown
+    drawdown = (df['Cumulative_Return'] / peak) - 1
+    mdd = drawdown.min()
+    
+    # 3. Sharpe Ratio (Annualized)
+    annualized_volatility = df['Strategy_Return'].std() * (252**0.5) # 252 trading days
+    sharpe_ratio = (cagr - risk_free_rate) / annualized_volatility
+
+    return {
+        'CAGR': cagr,
+        'Max Drawdown': mdd,
+        'Sharpe Ratio': sharpe_ratio
+    }
+
 # --- Visualization ---
 def visualize_strategy(df, asset_name):
     """
@@ -132,6 +157,13 @@ if __name__ == "__main__":
             initial_capital = backtested_data['Cumulative_PnL'].iloc[0]
             total_return = (final_pnl / initial_capital - 1) * 100
             print(f"💰 Final PnL: ${final_pnl:,.2f} | Total Return: {total_return:,.2f}%")
+            
+            # Calculate and print performance metrics
+            metrics = calculate_performance_metrics(backtested_data)
+            print("📊 Strategy Performance Metrics:")
+            print(f"   Annualized Return (CAGR): {metrics['CAGR'] * 100:.2f}%")
+            print(f"   Max Drawdown (MDD): {metrics['Max Drawdown'] * 100:.2f}%")
+            print(f"   Sharpe Ratio (Annualized): {metrics['Sharpe Ratio']:.2f}")
             
             # 5. Visualize the PnL and trade points
             visualize_strategy(backtested_data, ASSET_NAME)
