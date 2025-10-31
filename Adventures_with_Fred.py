@@ -96,23 +96,41 @@ def calculate_performance_metrics(df, return_col, risk_free_rate=0.0):
 # --- Visualization ---
 def visualize_strategy(df, asset_name, benchmark_pnl):
     """
-    Plots the Cumulative PnL, the benchmark, and highlights Buy/Sell entry/exit points.
+    Plots the Cumulative PnL, the benchmark, and the underlying asset price.
     """
-    plt.figure(figsize=(14, 7))
-    plt.plot(df['Cumulative_PnL'], label='Strategy PnL (Meta-Signal)', color='dodgerblue', linewidth=2)
-    plt.plot(benchmark_pnl, label=f'Benchmark PnL (Buy & Hold {asset_name})', color='darkorange', linestyle='--', linewidth=1.5)
+    fig, ax1 = plt.subplots(figsize=(14, 7)) # Create figure and first axis (for PnL)
+
+    # Plot PnL curves on ax1 (Left Y-Axis)
+    ax1.plot(df['Cumulative_PnL'], label='Strategy PnL (Meta-Signal)', color='dodgerblue', linewidth=2)
+    ax1.plot(benchmark_pnl, label=f'Benchmark PnL (Buy & Hold {asset_name})', color='darkorange', linestyle='--', linewidth=1.5)
+    ax1.set_ylabel('Cumulative PnL ($)', color='dodgerblue')
+    ax1.tick_params(axis='y', labelcolor='dodgerblue')
     
-    # Plot trade entry/exit points (Position changes)
-    plt.plot(df.loc[df['Position'] == 1.0].index,
+    # Plot trade entry/exit points (Position changes) on ax1
+    ax1.plot(df.loc[df['Position'] == 1.0].index,
              df['Cumulative_PnL'].loc[df['Position'] == 1.0],
              '^', markersize=10, color='green', label='Buy Signal', alpha=0.7)
 
-    plt.plot(df.loc[df['Position'] == -1.0].index,
+    ax1.plot(df.loc[df['Position'] == -1.0].index,
              df['Cumulative_PnL'].loc[df['Position'] == -1.0],
              'v', markersize=10, color='red', label='Sell Signal', alpha=0.7)
 
-    plt.title(f'MA Meta-Signal vs. Buy & Hold Benchmark (Asset: {asset_name})', fontsize=16)
-    plt.xlabel('Date'); plt.ylabel('Cumulative PnL ($)'); plt.legend(); plt.grid(True); plt.show()
+    # Create a second Y-axis (Right Y-Axis) for the S&P 500 Price
+    ax2 = ax1.twinx()
+    close_col = f'{asset_name}_Close'
+    ax2.plot(df[close_col], label=f'{asset_name} Price', color='gray', linewidth=0.8, alpha=0.5)
+    ax2.set_ylabel(f'{asset_name} Price (FRED Data)', color='gray')
+    ax2.tick_params(axis='y', labelcolor='gray')
+
+    # Combine legends from both axes
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+
+    ax1.set_title(f'MA Meta-Signal vs. Buy & Hold Benchmark (Asset: {asset_name})', fontsize=16)
+    ax1.set_xlabel('Date')
+    ax1.grid(True)
+    plt.show()
 
 
 if __name__ == "__main__":
