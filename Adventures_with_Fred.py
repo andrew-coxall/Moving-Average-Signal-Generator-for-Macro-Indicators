@@ -55,52 +55,18 @@ def calculate_ma_crossover_signal(series, asset_name, short_window=50, long_wind
 
     return df[[signal_col]]
 
-# --- Backtesting and PnL Simulation with 5% Trailing Stop-Loss ---
-# This is the function you wanted to use, which includes the trailing stop logic.
-def backtest_strategy(df, close_col, signal_col, capital=1000, trailing_stop=0.05):
+# --- Backtesting and PnL Simulation ---
+def backtest_strategy(df, close_col, signal_col, capital=1000):
     """
     Simulates trades based on a specified 'Signal' column and calculates PnL.
-    Fully integrates a 5% trailing stop-loss to mitigate large sudden losses.
     """
     df['Daily_Return'] = df[close_col].pct_change()
-    
-    cumulative_return = 1.0
-    peak_return = 1.0
-    position = 0  # 1 = long, 0 = flat
+    # Strategy Return = Daily Return * Position (lagged by 1 day)
+    df['Strategy_Return'] = df['Daily_Return'] * df[signal_col].shift(1)
 
-    cumulative_returns = []
-    positions = []
-    strategy_returns = []
-
-    for i in range(len(df)):
-        signal = df[signal_col].iloc[i]
-
-        # Handle signal changes
-        if signal == 1 and position == 0:
-            position = 1  # Enter long
-            peak_return = cumulative_return  # reset peak for new trade
-        elif signal == 0 and position == 1:
-            position = 0  # Exit to cash
-
-        # Apply daily return if in position
-        daily_ret = df['Daily_Return'].iloc[i] * position if not pd.isna(df['Daily_Return'].iloc[i]) else 0.0
-        cumulative_return *= (1 + daily_ret)
-
-        # --- Apply Trailing Stop ---
-        if position == 1 and trailing_stop > 0:
-            peak_return = max(peak_return, cumulative_return)
-            if cumulative_return < peak_return * (1 - trailing_stop):
-                position = 0  # Exit immediately
-                peak_return = cumulative_return  # reset peak for next entry
-
-        cumulative_returns.append(cumulative_return)
-        positions.append(position)
-        strategy_returns.append(daily_ret)
-
-    df['Cumulative_Return'] = cumulative_returns
+    # Calculate cumulative strategy returns (PnL)
+    df['Cumulative_Return'] = (1 + df['Strategy_Return']).cumprod()
     df['Cumulative_PnL'] = df['Cumulative_Return'] * capital
-    df['Position'] = positions
-    df['Strategy_Return'] = strategy_returns
 
     return df
 
@@ -108,39 +74,21 @@ def backtest_strategy(df, close_col, signal_col, capital=1000, trailing_stop=0.0
 def calculate_performance_metrics(df, return_col, risk_free_rate=0.0):
     """Calculates key performance metrics like CAGR, Max Drawdown, and Sharpe Ratio."""
     
-    # 💥 CRITICAL FIX: Apply targeted dropna and check for empty DataFrame
-    df_clean = df.copy().dropna(subset=[return_col])
-    
-    if df_clean.empty or len(df_clean) < 2:
-        # Prevents IndexError if DataFrame is empty or has only one row
-        return {
-            'CAGR': 0.0,
-            'Max Drawdown': 0.0,
-            'Sharpe Ratio': 0.0
-        }
-        
     # 1. Annualized Return (CAGR)
-    days = (df_clean.index[-1] - df_clean.index[0]).days
-    
-    # If the time span is too short (e.g., 0 days), handle it
-    if days == 0:
-        return {
-            'CAGR': 0.0, 'Max Drawdown': 0.0, 'Sharpe Ratio': 0.0
-        }
-
-    cumulative_return = (1 + df_clean[return_col]).cumprod().iloc[-1]
+    days = (df.index[-1] - df.index[0]).days
+    cumulative_return = (1 + df[return_col]).cumprod().iloc[-1]
     cagr = (cumulative_return ** (365.25 / days)) - 1
     
     # 2. Maximum Drawdown (MDD)
     # Calculate the running maximum (peak)
-    peak = (1 + df_clean[return_col]).cumprod().cummax()
+    peak = (1 + df[return_col]).cumprod().cummax()
     # Calculate the Drawdown
-    drawdown = ((1 + df_clean[return_col]).cumprod() / peak) - 1
+    drawdown = ((1 + df[return_col]).cumprod() / peak) - 1
     mdd = drawdown.min()
     
     # 3. Sharpe Ratio (Annualized)
-    annualized_volatility = df_clean[return_col].std() * (252**0.5) # 252 trading days
-    sharpe_ratio = (cagr - risk_free_rate) / annualized_volatility if annualized_volatility else 0.0
+    annualized_volatility = df[return_col].std() * (252**0.5) # 252 trading days
+    sharpe_ratio = (cagr - risk_free_rate) / annualized_volatility
 
     return {
         'CAGR': cagr,
@@ -162,15 +110,12 @@ def visualize_strategy(df, asset_name):
     ax1.set_ylabel('Cumulative PnL ($)', color='dodgerblue')
     ax1.tick_params(axis='y', labelcolor='dodgerblue')
     
-    # Identify trade signals (where position status changes)
-    df['Position_Change'] = df['Position'].diff()
-    # Entry is a change from 0 to 1 (Position_Change = 1)
-    # Exit is a change from 1 to 0 (Position_Change = -1)
-    signals = df.loc[df['Position_Change'].abs() == 1.0].copy() 
+    # Identify ALL trade signals (Position changes)
+    signals = df.loc[df['Position'].abs() == 1.0].copy() 
     
     # Scatter plot on PnL curve to mark the points (Larger markers)
-    buy_signals = signals.loc[signals['Position_Change'] == 1.0]
-    sell_signals = signals.loc[signals['Position_Change'] == -1.0]
+    buy_signals = signals.loc[signals['Position'] == 1.0]
+    sell_signals = signals.loc[signals['Position'] == -1.0]
     
     ax1.plot(buy_signals.index,
              buy_signals['Cumulative_PnL'],
@@ -189,17 +134,19 @@ def visualize_strategy(df, asset_name):
     }
 
     # --- Alternating Vertical Placement for Readability ---
-    vertical_offset_multiplier_base = 1.015 
-    vertical_offset_multiplier_alt = 1.045 
+    vertical_offset_multiplier_base = 1.015 # Base offset (1.5% above PnL line)
+    vertical_offset_multiplier_alt = 1.045 # Alternate offset (4.5% above PnL line)
     counter = 0
 
     for date, row in signals.iterrows():
-        color = 'green' if row['Position_Change'] == 1.0 else 'red'
+        color = 'green' if row['Position'] == 1.0 else 'red'
         
         # Calculate y_pos based on alternating counter
         if counter % 2 == 0:
+            # Place label closer to the PnL line (Base)
             y_pos = row['Cumulative_PnL'] * vertical_offset_multiplier_base
         else:
+            # Place label higher (Alternate)
             y_pos = row['Cumulative_PnL'] * vertical_offset_multiplier_alt
             
         counter += 1
@@ -213,16 +160,16 @@ def visualize_strategy(df, asset_name):
                  bbox=bbox_style)    
 
     # --- ADD FINAL PNL AMOUNT (Moved to Bottom Right) ---
-    final_pnl = df['Cumulative_PnL'].iloc[-1] if not df.empty else np.nan
+    final_pnl = df['Cumulative_PnL'].iloc[-1]
+    final_pnl_text = f"Final PnL: ${final_pnl:,.2f}"
     
-    # 💥 FIX: Ensure Final PnL text handles NaN gracefully
-    if np.isnan(final_pnl):
-        final_pnl_text = "Final PnL: $0.00 (No Data)"
-    else:
-        final_pnl_text = f"Final PnL: ${final_pnl:,.2f}"
-
+    # Get the minimum PnL value to set the text near the bottom of the visible plot area
+    min_pnl = df['Cumulative_PnL'].min()
     # Use a fixed fraction of the y-axis range for consistent placement
-    ax1.text(0.98, 0.05, final_pnl_text, 
+    y_range = ax1.get_ylim()[1] - ax1.get_ylim()[0]
+    final_y_pos = ax1.get_ylim()[0] + y_range * 0.05 
+    
+    ax1.text(0.98, 0.05, final_pnl_text, # Use normalized axes for fixed position (0.98 x-pos, 0.05 y-pos)
              transform=ax1.transAxes,
              color='black', 
              ha='right', 
@@ -274,10 +221,9 @@ if __name__ == "__main__":
 
         # 3. Define the Trading Signal (Meta-Signal: Both signals must be 'Risk-On')
         merged_data['Trading_Signal'] = merged_data['SP500_Signal'] * merged_data['10Y_Treasury_Signal']
-        # Position column is redefined inside backtest_strategy for accurate plotting of PnL change
-        merged_data['Position'] = merged_data['Trading_Signal'] 
+        merged_data['Position'] = merged_data['Trading_Signal'].diff()
 
-        # Final cleanup after MA calculation
+        # Final cleanup after MA calculation and diff
         merged_data.dropna(inplace=True)
         
         print("✅ Signals generated and merged (showing final 5 rows):")
@@ -287,36 +233,31 @@ if __name__ == "__main__":
         CLOSE_COLUMN = f'{ASSET_NAME}_Close'
         initial_capital = 1000 # Initial capital for backtesting
         
-        print("\n--- 4. Backtesting and PnL Simulation (Meta-Signal with Trailing Stop-Loss) ---")
+        print("\n--- 4. Backtesting and PnL Simulation (Meta-Signal) ---")
         backtested_data = backtest_strategy(merged_data.copy(), 
                                             close_col=CLOSE_COLUMN, 
                                             signal_col='Trading_Signal',
-                                            capital=initial_capital,
-                                            trailing_stop=0.05)  # 5% Trailing Stop
+                                            capital=initial_capital)
                                             
         
-        if backtested_data is not None and not backtested_data.empty: 
+        if backtested_data is not None:
             final_pnl = backtested_data['Cumulative_PnL'].iloc[-1]
             total_return = (final_pnl / initial_capital - 1) * 100
             print(f"💰 Final Strategy PnL: ${final_pnl:,.2f} | Total Return: {total_return:,.2f}%")
             
             # Calculate and print strategy performance metrics
-            # 💥 CRITICAL FIX: Removed the unsafe .dropna() call
-            metrics = calculate_performance_metrics(backtested_data, 'Strategy_Return')
+            metrics = calculate_performance_metrics(backtested_data.dropna(), 'Strategy_Return')
             print("📊 Strategy Performance Metrics:")
             print(f"   Annualized Return (CAGR): {metrics['CAGR'] * 100:.2f}%")
             print(f"   Max Drawdown (MDD): {metrics['Max Drawdown'] * 100:.2f}%")
             print(f"   Sharpe Ratio (Annualized): {metrics['Sharpe Ratio']:.2f}")
 
             # Calculate and print benchmark performance metrics
-            # 💥 CRITICAL FIX: Removed the unsafe .dropna() call
-            benchmark_metrics = calculate_performance_metrics(backtested_data, 'Daily_Return')
+            benchmark_metrics = calculate_performance_metrics(backtested_data.dropna(), 'Daily_Return')
             print("\n📈 Benchmark (Buy & Hold) Performance:")
             print(f"   Annualized Return (CAGR): {benchmark_metrics['CAGR'] * 100:.2f}%")
             print(f"   Max Drawdown (MDD): {benchmark_metrics['Max Drawdown'] * 100:.2f}%")
             print(f"   Sharpe Ratio (Annualized): {benchmark_metrics['Sharpe Ratio']:.2f}")
 
-            # 5. Visualize the PnL and trade points (Chart GUI)
+            # 5. Visualize the PnL and trade points
             visualize_strategy(backtested_data, ASSET_NAME)
-        else:
-            print("\n🚨 Backtested data is empty. Cannot calculate performance or visualize.")
