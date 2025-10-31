@@ -99,12 +99,10 @@ def calculate_performance_metrics(df, return_col, risk_free_rate=0.0):
 # --- Visualization ---
 def visualize_strategy(df, asset_name):
     """
-    Plots only the Strategy Cumulative PnL and adds text labels
-    for "Total amount in account" above each buy/sell signal.
-    
-    NOTE: The benchmark PnL plot and its legend entries have been removed.
+    Plots only the Strategy Cumulative PnL, adds text labels for "Total amount in account" 
+    at each signal with improved readability, and adds the final balance in black.
     """
-    fig, ax1 = plt.subplots(figsize=(14, 7)) # Create figure and axis
+    fig, ax1 = plt.subplots(figsize=(16, 8)) # Slightly larger figure for better display
 
     # Plot PnL curve
     ax1.plot(df['Cumulative_PnL'], label='Strategy PnL (Meta-Signal)', color='dodgerblue', linewidth=2)
@@ -115,32 +113,55 @@ def visualize_strategy(df, asset_name):
     buy_signals = df.loc[df['Position'] == 1.0]
     sell_signals = df.loc[df['Position'] == -1.0]
     
-    # Scatter plot on PnL curve to mark the points
+    # Scatter plot on PnL curve to mark the points (Larger markers)
     ax1.plot(buy_signals.index,
              buy_signals['Cumulative_PnL'],
-             '^', markersize=10, color='green', label='Buy Signal', alpha=0.7)
+             '^', markersize=12, color='green', label='Buy Signal', alpha=0.9)
 
     ax1.plot(sell_signals.index,
              sell_signals['Cumulative_PnL'],
-             'v', markersize=10, color='red', label='Sell Signal', alpha=0.7)
+             'v', markersize=12, color='red', label='Sell Signal', alpha=0.9)
 
-    # Add text labels for "Total amount in account" above each signal
-    for date, row in buy_signals.iterrows():
-        # Adjust y-position slightly above the marker
-        y_pos = row['Cumulative_PnL'] * 1.01
-        ax1.text(date, y_pos, f"${row['Cumulative_PnL']:.2f}", 
-                 color='green', ha='center', va='bottom', fontsize=8, weight='bold')
+    # Define the bounding box style for better readability
+    bbox_style = {
+        'facecolor': 'white', # White background
+        'alpha': 0.7,         # Semi-transparent
+        'boxstyle': 'round,pad=0.4', # Rounded corners
+        'edgecolor': 'none'   # No border
+    }
 
-    for date, row in sell_signals.iterrows():
-        # Adjust y-position slightly above the marker
-        y_pos = row['Cumulative_PnL'] * 1.01
+    # Add text labels for trade signals (Buy/Sell)
+    for date, row in pd.concat([buy_signals, sell_signals]).iterrows():
+        color = 'green' if row['Position'] == 1.0 else 'red'
+        y_pos = row['Cumulative_PnL'] * 1.015 # Vertical offset
+        
         ax1.text(date, y_pos, f"${row['Cumulative_PnL']:.2f}", 
-                 color='red', ha='center', va='bottom', fontsize=8, weight='bold')
+                 color=color, 
+                 ha='center', 
+                 va='bottom', 
+                 fontsize=10,        # Increased font size
+                 weight='bold',      # Bold text
+                 bbox=bbox_style)    # Apply background box
+
+    # --- ADD FINAL PNL AMOUNT ---
+    final_date = df.index[-1]
+    final_pnl = df['Cumulative_PnL'].iloc[-1]
+    final_pnl_text = f"Final PnL: ${final_pnl:,.2f}"
+    
+    # Add text at the final point (in black)
+    ax1.text(final_date, final_pnl * 1.015, final_pnl_text, 
+             color='black', 
+             ha='right', 
+             va='bottom', 
+             fontsize=12,        # Slightly larger for final amount
+             weight='extra bold', 
+             bbox={'facecolor': 'yellow', 'alpha': 0.7, 'boxstyle': 'round,pad=0.5', 'edgecolor': 'black'})
+
 
     # Add legend
     ax1.legend(loc='upper left')
 
-    ax1.set_title(f'MA Meta-Signal Strategy PnL (Asset: {asset_name}) with Account Balance at Signals', fontsize=16)
+    ax1.set_title(f'MA Meta-Signal Strategy PnL (Asset: {asset_name}) with Account Balance Labels', fontsize=16)
     ax1.set_xlabel('Date')
     ax1.grid(True)
     plt.show()
@@ -188,8 +209,6 @@ if __name__ == "__main__":
                                             signal_col='Trading_Signal',
                                             capital=initial_capital)
                                             
-        # NOTE: Benchmark calculation is no longer used for visualization but is kept
-        # for performance comparison metrics below.
         
         if backtested_data is not None:
             final_pnl = backtested_data['Cumulative_PnL'].iloc[-1]
@@ -204,7 +223,6 @@ if __name__ == "__main__":
             print(f"   Sharpe Ratio (Annualized): {metrics['Sharpe Ratio']:.2f}")
 
             # Calculate and print benchmark performance metrics
-            # Recalculate Buy & Hold returns for the benchmark metric calculation
             benchmark_metrics = calculate_performance_metrics(backtested_data.dropna(), 'Daily_Return')
             print("\n📈 Benchmark (Buy & Hold) Performance:")
             print(f"   Annualized Return (CAGR): {benchmark_metrics['CAGR'] * 100:.2f}%")
