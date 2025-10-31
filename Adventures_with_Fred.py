@@ -56,7 +56,7 @@ def calculate_ma_crossover_signal(series, asset_name, short_window=50, long_wind
     return df[[signal_col]]
 
 # --- Backtesting and PnL Simulation ---
-def backtest_strategy(df, close_col, signal_col, capital=1000): # Changed initial capital to 1000
+def backtest_strategy(df, close_col, signal_col, capital=1000):
     """
     Simulates trades based on a specified 'Signal' column and calculates PnL.
     """
@@ -97,29 +97,25 @@ def calculate_performance_metrics(df, return_col, risk_free_rate=0.0):
     }
 
 # --- Visualization ---
-def visualize_strategy(df, asset_name, benchmark_pnl, initial_capital_for_plot=1000):
+def visualize_strategy(df, asset_name):
     """
-    Plots the Cumulative PnL, the benchmark, and adds text labels
+    Plots only the Strategy Cumulative PnL and adds text labels
     for "Total amount in account" above each buy/sell signal.
+    
+    NOTE: The benchmark PnL plot and its legend entries have been removed.
     """
-    fig, ax1 = plt.subplots(figsize=(14, 7)) # Create figure and first axis (for PnL)
+    fig, ax1 = plt.subplots(figsize=(14, 7)) # Create figure and axis
 
-    # Plot PnL curves on ax1 (Left Y-Axis)
+    # Plot PnL curve
     ax1.plot(df['Cumulative_PnL'], label='Strategy PnL (Meta-Signal)', color='dodgerblue', linewidth=2)
-    # Ensure benchmark PnL is scaled by the new initial_capital_for_plot for consistency
-    # (Assuming benchmark_pnl passed here is already scaled by its own initial capital)
-    # If benchmark_pnl is always based on the original initial_capital (100k), you might need to re-calculate it here
-    # For now, I'll assume benchmark_pnl is already appropriately scaled.
-    ax1.plot(benchmark_pnl, label=f'Benchmark PnL (Buy & Hold {asset_name})', color='darkorange', linestyle='--', linewidth=1.5)
     ax1.set_ylabel('Cumulative PnL ($)', color='dodgerblue')
     ax1.tick_params(axis='y', labelcolor='dodgerblue')
     
-    # Plot trade entry/exit points (Position changes) on ax1
+    # Identify trade entry/exit points (Position changes)
     buy_signals = df.loc[df['Position'] == 1.0]
     sell_signals = df.loc[df['Position'] == -1.0]
     
     # Scatter plot on PnL curve to mark the points
-    # No need for axvline anymore
     ax1.plot(buy_signals.index,
              buy_signals['Cumulative_PnL'],
              '^', markersize=10, color='green', label='Buy Signal', alpha=0.7)
@@ -141,14 +137,10 @@ def visualize_strategy(df, asset_name, benchmark_pnl, initial_capital_for_plot=1
         ax1.text(date, y_pos, f"${row['Cumulative_PnL']:.2f}", 
                  color='red', ha='center', va='bottom', fontsize=8, weight='bold')
 
-    # Remove the second Y-axis (ax2) for S&P 500 Price as requested
-    # No ax2.twinx() and related plotting
+    # Add legend
+    ax1.legend(loc='upper left')
 
-    # Combine legends from only ax1
-    lines1, labels1 = ax1.get_legend_handles_labels()
-    ax1.legend(lines1, labels1, loc='upper left')
-
-    ax1.set_title(f'MA Meta-Signal vs. Buy & Hold Benchmark (Asset: {asset_name}) with Account Balance at Signals', fontsize=16)
+    ax1.set_title(f'MA Meta-Signal Strategy PnL (Asset: {asset_name}) with Account Balance at Signals', fontsize=16)
     ax1.set_xlabel('Date')
     ax1.grid(True)
     plt.show()
@@ -188,19 +180,16 @@ if __name__ == "__main__":
         
         ASSET_NAME = 'SP500'
         CLOSE_COLUMN = f'{ASSET_NAME}_Close'
+        initial_capital = 1000 # Initial capital for backtesting
         
         print("\n--- 4. Backtesting and PnL Simulation (Meta-Signal) ---")
-        initial_capital = 1000 # Set initial capital for backtesting here
         backtested_data = backtest_strategy(merged_data.copy(), 
                                             close_col=CLOSE_COLUMN, 
                                             signal_col='Trading_Signal',
-                                            capital=initial_capital) # Pass initial_capital to backtest_strategy
+                                            capital=initial_capital)
                                             
-        # --- Buy and Hold Benchmark Calculation ---
-        # Recalculate benchmark PnL with the same initial capital for consistent comparison on the plot
-        sp500_returns = backtested_data[CLOSE_COLUMN].pct_change().dropna()
-        benchmark_returns = (1 + sp500_returns).cumprod()
-        benchmark_pnl = benchmark_returns * initial_capital # Use the same initial_capital
+        # NOTE: Benchmark calculation is no longer used for visualization but is kept
+        # for performance comparison metrics below.
         
         if backtested_data is not None:
             final_pnl = backtested_data['Cumulative_PnL'].iloc[-1]
@@ -215,6 +204,7 @@ if __name__ == "__main__":
             print(f"   Sharpe Ratio (Annualized): {metrics['Sharpe Ratio']:.2f}")
 
             # Calculate and print benchmark performance metrics
+            # Recalculate Buy & Hold returns for the benchmark metric calculation
             benchmark_metrics = calculate_performance_metrics(backtested_data.dropna(), 'Daily_Return')
             print("\n📈 Benchmark (Buy & Hold) Performance:")
             print(f"   Annualized Return (CAGR): {benchmark_metrics['CAGR'] * 100:.2f}%")
@@ -222,4 +212,4 @@ if __name__ == "__main__":
             print(f"   Sharpe Ratio (Annualized): {benchmark_metrics['Sharpe Ratio']:.2f}")
 
             # 5. Visualize the PnL and trade points
-            visualize_strategy(backtested_data, ASSET_NAME, benchmark_pnl, initial_capital_for_plot=initial_capital)
+            visualize_strategy(backtested_data, ASSET_NAME)
