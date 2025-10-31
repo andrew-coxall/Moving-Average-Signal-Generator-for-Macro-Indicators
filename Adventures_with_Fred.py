@@ -68,22 +68,23 @@ def backtest_strategy(df, close_col, signal_col, capital=100000):
     return df
 
 # --- Performance Metrics Calculation ---
-def calculate_performance_metrics(df, risk_free_rate=0.0):
+def calculate_performance_metrics(df, return_col, risk_free_rate=0.0):
     """Calculates key performance metrics like CAGR, Max Drawdown, and Sharpe Ratio."""
     
     # 1. Annualized Return (CAGR)
     days = (df.index[-1] - df.index[0]).days
-    cagr = (df['Cumulative_Return'].iloc[-1] ** (365.25 / days)) - 1
+    cumulative_return = (1 + df[return_col]).cumprod().iloc[-1]
+    cagr = (cumulative_return ** (365.25 / days)) - 1
     
     # 2. Maximum Drawdown (MDD)
     # Calculate the running maximum (peak)
-    peak = df['Cumulative_Return'].cummax()
+    peak = (1 + df[return_col]).cumprod().cummax()
     # Calculate the Drawdown
-    drawdown = (df['Cumulative_Return'] / peak) - 1
+    drawdown = ((1 + df[return_col]).cumprod() / peak) - 1
     mdd = drawdown.min()
     
     # 3. Sharpe Ratio (Annualized)
-    annualized_volatility = df['Strategy_Return'].std() * (252**0.5) # 252 trading days
+    annualized_volatility = df[return_col].std() * (252**0.5) # 252 trading days
     sharpe_ratio = (cagr - risk_free_rate) / annualized_volatility
 
     return {
@@ -93,12 +94,13 @@ def calculate_performance_metrics(df, risk_free_rate=0.0):
     }
 
 # --- Visualization ---
-def visualize_strategy(df, asset_name):
+def visualize_strategy(df, asset_name, benchmark_pnl):
     """
-    Plots the Cumulative PnL and highlights Buy/Sell entry/exit points.
+    Plots the Cumulative PnL, the benchmark, and highlights Buy/Sell entry/exit points.
     """
     plt.figure(figsize=(14, 7))
-    plt.plot(df['Cumulative_PnL'], label='Strategy PnL', color='dodgerblue', linewidth=2)
+    plt.plot(df['Cumulative_PnL'], label='Strategy PnL (Meta-Signal)', color='dodgerblue', linewidth=2)
+    plt.plot(benchmark_pnl, label=f'Benchmark PnL (Buy & Hold {asset_name})', color='darkorange', linestyle='--', linewidth=1.5)
     
     # Plot trade entry/exit points (Position changes)
     plt.plot(df.loc[df['Position'] == 1.0].index,
@@ -109,7 +111,7 @@ def visualize_strategy(df, asset_name):
              df['Cumulative_PnL'].loc[df['Position'] == -1.0],
              'v', markersize=10, color='red', label='Sell Signal', alpha=0.7)
 
-    plt.title(f'MA Meta-Signal PnL vs Time (Asset: {asset_name})', fontsize=16)
+    plt.title(f'MA Meta-Signal vs. Buy & Hold Benchmark (Asset: {asset_name})', fontsize=16)
     plt.xlabel('Date'); plt.ylabel('Cumulative PnL ($)'); plt.legend(); plt.grid(True); plt.show()
 
 
@@ -152,18 +154,31 @@ if __name__ == "__main__":
         backtested_data = backtest_strategy(merged_data.copy(), 
                                             close_col=CLOSE_COLUMN, 
                                             signal_col='Trading_Signal')
+                                            
+        # --- Buy and Hold Benchmark Calculation ---
+        initial_capital = backtested_data['Cumulative_PnL'].iloc[0]
+        sp500_returns = backtested_data[CLOSE_COLUMN].pct_change().dropna()
+        benchmark_returns = (1 + sp500_returns).cumprod()
+        benchmark_pnl = benchmark_returns * initial_capital
+        
         if backtested_data is not None:
             final_pnl = backtested_data['Cumulative_PnL'].iloc[-1]
-            initial_capital = backtested_data['Cumulative_PnL'].iloc[0]
             total_return = (final_pnl / initial_capital - 1) * 100
-            print(f"💰 Final PnL: ${final_pnl:,.2f} | Total Return: {total_return:,.2f}%")
+            print(f"💰 Final Strategy PnL: ${final_pnl:,.2f} | Total Return: {total_return:,.2f}%")
             
-            # Calculate and print performance metrics
-            metrics = calculate_performance_metrics(backtested_data)
+            # Calculate and print strategy performance metrics
+            metrics = calculate_performance_metrics(backtested_data.dropna(), 'Strategy_Return')
             print("📊 Strategy Performance Metrics:")
             print(f"   Annualized Return (CAGR): {metrics['CAGR'] * 100:.2f}%")
             print(f"   Max Drawdown (MDD): {metrics['Max Drawdown'] * 100:.2f}%")
             print(f"   Sharpe Ratio (Annualized): {metrics['Sharpe Ratio']:.2f}")
-            
+
+            # Calculate and print benchmark performance metrics
+            benchmark_metrics = calculate_performance_metrics(backtested_data.dropna(), 'Daily_Return')
+            print("\n📈 Benchmark (Buy & Hold) Performance:")
+            print(f"   Annualized Return (CAGR): {benchmark_metrics['CAGR'] * 100:.2f}%")
+            print(f"   Max Drawdown (MDD): {benchmark_metrics['Max Drawdown'] * 100:.2f}%")
+            print(f"   Sharpe Ratio (Annualized): {benchmark_metrics['Sharpe Ratio']:.2f}")
+
             # 5. Visualize the PnL and trade points
-            visualize_strategy(backtested_data, ASSET_NAME)
+            visualize_strategy(backtested_data, ASSET_NAME, benchmark_pnl)
