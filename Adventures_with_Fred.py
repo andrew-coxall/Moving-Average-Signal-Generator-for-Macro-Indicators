@@ -99,9 +99,9 @@ def calculate_performance_metrics(df, return_col, risk_free_rate=0.0):
 # --- Visualization ---
 def visualize_strategy(df, asset_name):
     """
-    Plots only the Strategy Cumulative PnL, adds text labels for "Total amount in account" 
+    Plots the Strategy Cumulative PnL, adds text labels for "Total amount in account" 
     at each signal with alternating vertical placement for better readability, 
-    and adds the final balance in black.
+    moves the final balance to the bottom right, and updates the legend.
     """
     fig, ax1 = plt.subplots(figsize=(16, 8)) # Slightly larger figure for better display
 
@@ -119,11 +119,11 @@ def visualize_strategy(df, asset_name):
     
     ax1.plot(buy_signals.index,
              buy_signals['Cumulative_PnL'],
-             '^', markersize=12, color='green', label='Buy Signal', alpha=0.9)
+             '^', markersize=12, color='green', label='Buy Signal (Go Long)', alpha=0.9)
 
     ax1.plot(sell_signals.index,
              sell_signals['Cumulative_PnL'],
-             'v', markersize=12, color='red', label='Sell Signal', alpha=0.9)
+             'v', markersize=12, color='red', label='Sell Signal (Go Flat)', alpha=0.9)
 
     # Define the bounding box style for better readability
     bbox_style = {
@@ -159,27 +159,39 @@ def visualize_strategy(df, asset_name):
                  weight='bold',      
                  bbox=bbox_style)    
 
-    # --- ADD FINAL PNL AMOUNT (Black with Yellow Box) ---
-    final_date = df.index[-1]
+    # --- ADD FINAL PNL AMOUNT (Moved to Bottom Right) ---
     final_pnl = df['Cumulative_PnL'].iloc[-1]
     final_pnl_text = f"Final PnL: ${final_pnl:,.2f}"
     
-    # Place the final PnL label high enough to be seen easily
-    final_y_pos = df['Cumulative_PnL'].max() * 1.01
+    # Get the minimum PnL value to set the text near the bottom of the visible plot area
+    min_pnl = df['Cumulative_PnL'].min()
+    # Use a fixed fraction of the y-axis range for consistent placement
+    y_range = ax1.get_ylim()[1] - ax1.get_ylim()[0]
+    final_y_pos = ax1.get_ylim()[0] + y_range * 0.05 
     
-    ax1.text(final_date, final_y_pos, final_pnl_text, 
+    ax1.text(0.98, 0.05, final_pnl_text, # Use normalized axes for fixed position (0.98 x-pos, 0.05 y-pos)
+             transform=ax1.transAxes,
              color='black', 
              ha='right', 
              va='bottom', 
-             fontsize=12,        # Slightly larger for final amount
+             fontsize=14,        
              weight='extra bold', 
-             bbox={'facecolor': 'yellow', 'alpha': 0.7, 'boxstyle': 'round,pad=0.5', 'edgecolor': 'black'})
+             bbox={'facecolor': 'yellow', 'alpha': 0.8, 'boxstyle': 'round,pad=0.5', 'edgecolor': 'black'})
 
 
-    # Add legend
-    ax1.legend(loc='upper left')
+    # --- LEGEND UPDATE: Include explanation for PnL tracker numbers ---
+    
+    # Combine existing handles/labels
+    lines, labels = ax1.get_legend_handles_labels()
 
-    ax1.set_title(f'MA Meta-Signal Strategy PnL (Asset: {asset_name}) with Improved Account Balance Labels', fontsize=16)
+    # Add the new descriptive label
+    lines.append(plt.Line2D([0], [0], linestyle='none', marker='None')) # Dummy handle for text
+    labels.append('\n**Account Balance Tracker**:\nGreen/Red numbers indicate the account value at the exact moment a Buy/Sell signal is generated.')
+
+    # Place the updated legend
+    ax1.legend(lines, labels, loc='upper left')
+
+    ax1.set_title(f'MA Meta-Signal Strategy PnL (Asset: {asset_name})', fontsize=16)
     ax1.set_xlabel('Date')
     ax1.grid(True)
     plt.show()
