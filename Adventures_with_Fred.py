@@ -1,5 +1,6 @@
 import pandas as pd
 from fredapi import Fred
+import matplotlib.pyplot as plt
 
 FRED_API_KEY = '559636d8c83399a1c2dbffce0bb2c897'
 
@@ -66,6 +67,27 @@ def backtest_strategy(df, close_col, signal_col, capital=100000):
 
     return df
 
+# --- Visualization ---
+def visualize_strategy(df, asset_name):
+    """
+    Plots the Cumulative PnL and highlights Buy/Sell entry/exit points.
+    """
+    plt.figure(figsize=(14, 7))
+    plt.plot(df['Cumulative_PnL'], label='Strategy PnL', color='dodgerblue', linewidth=2)
+    
+    # Plot trade entry/exit points (Position changes)
+    plt.plot(df.loc[df['Position'] == 1.0].index,
+             df['Cumulative_PnL'].loc[df['Position'] == 1.0],
+             '^', markersize=10, color='green', label='Buy Signal', alpha=0.7)
+
+    plt.plot(df.loc[df['Position'] == -1.0].index,
+             df['Cumulative_PnL'].loc[df['Position'] == -1.0],
+             'v', markersize=10, color='red', label='Sell Signal', alpha=0.7)
+
+    plt.title(f'MA Meta-Signal PnL vs Time (Asset: {asset_name})', fontsize=16)
+    plt.xlabel('Date'); plt.ylabel('Cumulative PnL ($)'); plt.legend(); plt.grid(True); plt.show()
+
+
 if __name__ == "__main__":
     merged_data = None
     for name, ticker in INDICATORS.items():
@@ -110,3 +132,6 @@ if __name__ == "__main__":
             initial_capital = backtested_data['Cumulative_PnL'].iloc[0]
             total_return = (final_pnl / initial_capital - 1) * 100
             print(f"💰 Final PnL: ${final_pnl:,.2f} | Total Return: {total_return:,.2f}%")
+            
+            # 5. Visualize the PnL and trade points
+            visualize_strategy(backtested_data, ASSET_NAME)
