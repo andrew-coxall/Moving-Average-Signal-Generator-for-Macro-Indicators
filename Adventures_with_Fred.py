@@ -1,8 +1,11 @@
 import pandas as pd
 from fredapi import Fred
 import matplotlib.pyplot as plt
+import numpy as np
 
-FRED_API_KEY = '559636d8c83399a1c2dbffce0bb2c897'
+# NOTE: The FRED_API_KEY must be a valid key for the script to fetch live data.
+# The key provided here is for example only.
+FRED_API_KEY = '559636d8c83399a1c2dbffce0bb2c897' 
 
 # Define the indicators and their FRED tickers
 INDICATORS = {
@@ -96,7 +99,8 @@ def calculate_performance_metrics(df, return_col, risk_free_rate=0.0):
 # --- Visualization ---
 def visualize_strategy(df, asset_name, benchmark_pnl):
     """
-    Plots the Cumulative PnL, the benchmark, and the underlying asset price.
+    Plots the Cumulative PnL, the benchmark, the underlying asset price, 
+    and adds vertical lines for trade entry/exit points.
     """
     fig, ax1 = plt.subplots(figsize=(14, 7)) # Create figure and first axis (for PnL)
 
@@ -107,12 +111,22 @@ def visualize_strategy(df, asset_name, benchmark_pnl):
     ax1.tick_params(axis='y', labelcolor='dodgerblue')
     
     # Plot trade entry/exit points (Position changes) on ax1
-    ax1.plot(df.loc[df['Position'] == 1.0].index,
-             df['Cumulative_PnL'].loc[df['Position'] == 1.0],
+    # Vertical lines for Buy and Sell signals
+    buy_signals = df.loc[df['Position'] == 1.0].index
+    sell_signals = df.loc[df['Position'] == -1.0].index
+    
+    for date in buy_signals:
+        ax1.axvline(x=date, color='green', linestyle=':', alpha=0.6, linewidth=1, label='_nolegend_')
+    for date in sell_signals:
+        ax1.axvline(x=date, color='red', linestyle=':', alpha=0.6, linewidth=1, label='_nolegend_')
+        
+    # Scatter plot on PnL curve to mark the points
+    ax1.plot(buy_signals,
+             df['Cumulative_PnL'].loc[buy_signals],
              '^', markersize=10, color='green', label='Buy Signal', alpha=0.7)
 
-    ax1.plot(df.loc[df['Position'] == -1.0].index,
-             df['Cumulative_PnL'].loc[df['Position'] == -1.0],
+    ax1.plot(sell_signals,
+             df['Cumulative_PnL'].loc[sell_signals],
              'v', markersize=10, color='red', label='Sell Signal', alpha=0.7)
 
     # Create a second Y-axis (Right Y-Axis) for the S&P 500 Price
