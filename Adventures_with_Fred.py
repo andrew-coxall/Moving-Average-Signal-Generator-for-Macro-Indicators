@@ -100,7 +100,8 @@ def calculate_performance_metrics(df, return_col, risk_free_rate=0.0):
 def visualize_strategy(df, asset_name):
     """
     Plots only the Strategy Cumulative PnL, adds text labels for "Total amount in account" 
-    at each signal with improved readability, and adds the final balance in black.
+    at each signal with alternating vertical placement for better readability, 
+    and adds the final balance in black.
     """
     fig, ax1 = plt.subplots(figsize=(16, 8)) # Slightly larger figure for better display
 
@@ -109,11 +110,13 @@ def visualize_strategy(df, asset_name):
     ax1.set_ylabel('Cumulative PnL ($)', color='dodgerblue')
     ax1.tick_params(axis='y', labelcolor='dodgerblue')
     
-    # Identify trade entry/exit points (Position changes)
-    buy_signals = df.loc[df['Position'] == 1.0]
-    sell_signals = df.loc[df['Position'] == -1.0]
+    # Identify ALL trade signals (Position changes)
+    signals = df.loc[df['Position'].abs() == 1.0].copy() 
     
     # Scatter plot on PnL curve to mark the points (Larger markers)
+    buy_signals = signals.loc[signals['Position'] == 1.0]
+    sell_signals = signals.loc[signals['Position'] == -1.0]
+    
     ax1.plot(buy_signals.index,
              buy_signals['Cumulative_PnL'],
              '^', markersize=12, color='green', label='Buy Signal', alpha=0.9)
@@ -130,26 +133,41 @@ def visualize_strategy(df, asset_name):
         'edgecolor': 'none'   # No border
     }
 
-    # Add text labels for trade signals (Buy/Sell)
-    for date, row in pd.concat([buy_signals, sell_signals]).iterrows():
+    # --- Alternating Vertical Placement for Readability ---
+    vertical_offset_multiplier_base = 1.015 # Base offset (1.5% above PnL line)
+    vertical_offset_multiplier_alt = 1.045 # Alternate offset (4.5% above PnL line)
+    counter = 0
+
+    for date, row in signals.iterrows():
         color = 'green' if row['Position'] == 1.0 else 'red'
-        y_pos = row['Cumulative_PnL'] * 1.015 # Vertical offset
+        
+        # Calculate y_pos based on alternating counter
+        if counter % 2 == 0:
+            # Place label closer to the PnL line (Base)
+            y_pos = row['Cumulative_PnL'] * vertical_offset_multiplier_base
+        else:
+            # Place label higher (Alternate)
+            y_pos = row['Cumulative_PnL'] * vertical_offset_multiplier_alt
+            
+        counter += 1
         
         ax1.text(date, y_pos, f"${row['Cumulative_PnL']:.2f}", 
                  color=color, 
                  ha='center', 
                  va='bottom', 
-                 fontsize=10,        # Increased font size
-                 weight='bold',      # Bold text
-                 bbox=bbox_style)    # Apply background box
+                 fontsize=10,        
+                 weight='bold',      
+                 bbox=bbox_style)    
 
-    # --- ADD FINAL PNL AMOUNT ---
+    # --- ADD FINAL PNL AMOUNT (Black with Yellow Box) ---
     final_date = df.index[-1]
     final_pnl = df['Cumulative_PnL'].iloc[-1]
     final_pnl_text = f"Final PnL: ${final_pnl:,.2f}"
     
-    # Add text at the final point (in black)
-    ax1.text(final_date, final_pnl * 1.015, final_pnl_text, 
+    # Place the final PnL label high enough to be seen easily
+    final_y_pos = df['Cumulative_PnL'].max() * 1.01
+    
+    ax1.text(final_date, final_y_pos, final_pnl_text, 
              color='black', 
              ha='right', 
              va='bottom', 
@@ -161,7 +179,7 @@ def visualize_strategy(df, asset_name):
     # Add legend
     ax1.legend(loc='upper left')
 
-    ax1.set_title(f'MA Meta-Signal Strategy PnL (Asset: {asset_name}) with Account Balance Labels', fontsize=16)
+    ax1.set_title(f'MA Meta-Signal Strategy PnL (Asset: {asset_name}) with Improved Account Balance Labels', fontsize=16)
     ax1.set_xlabel('Date')
     ax1.grid(True)
     plt.show()
