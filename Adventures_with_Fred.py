@@ -260,6 +260,3 @@ if __name__ == "__main__":
 
             # 5. Visualize the PnL and trade points
             visualize_strategy(backtested_data, ASSET_NAME)
-
-            print "\n✅ Backtesting and visualization complete."
-    
