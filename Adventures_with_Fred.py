@@ -3,8 +3,7 @@ from fredapi import Fred
 import matplotlib.pyplot as plt
 import numpy as np
 
-# NOTE: The FRED_API_KEY must be a valid key for the script to fetch live data.
-# The key provided here is for example only.
+# FRED API Key
 FRED_API_KEY = '559636d8c83399a1c2dbffce0bb2c897' 
 
 # Define the indicators and their FRED tickers
@@ -70,7 +69,7 @@ def backtest_strategy(df, close_col, signal_col, capital=1000):
 
     return df
 
-# --- Performance Metrics Calculation ---
+# Performance Metrics Calculation
 def calculate_performance_metrics(df, return_col, risk_free_rate=0.0):
     """Calculates key performance metrics like CAGR, Max Drawdown, and Sharpe Ratio."""
     
@@ -96,7 +95,7 @@ def calculate_performance_metrics(df, return_col, risk_free_rate=0.0):
         'Sharpe Ratio': sharpe_ratio
     }
 
-# --- Visualization ---
+# Visualization 
 def visualize_strategy(df, asset_name):
     """
     Plots the Strategy Cumulative PnL, adds text labels for "Total amount in account" 
@@ -133,7 +132,7 @@ def visualize_strategy(df, asset_name):
         'edgecolor': 'none'   # No border
     }
 
-    # --- Alternating Vertical Placement for Readability ---
+    # Alternating Vertical Placement for Readability 
     vertical_offset_multiplier_base = 1.015 # Base offset (1.5% above PnL line)
     vertical_offset_multiplier_alt = 1.045 # Alternate offset (4.5% above PnL line)
     counter = 0
@@ -261,3 +260,6 @@ if __name__ == "__main__":
 
             # 5. Visualize the PnL and trade points
             visualize_strategy(backtested_data, ASSET_NAME)
+
+            print "\n✅ Backtesting and visualization complete."
+    
